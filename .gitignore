@@ -1,0 +1,13 @@
+# Ignore la base de données locale
+db.sqlite
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Environnements virtuels
+env/
+.venv/
+
+# Fichiers Streamlit temporaires
+.streamlit/

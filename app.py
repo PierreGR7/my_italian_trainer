@@ -37,24 +37,31 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🇮🇹 Apprentissage interactif de l'italien")
+st.title("Apprentissage interactif de l'italien")
 
 menu = st.sidebar.radio("📚 Menu", ["Ajouter", "Réviser"])
 
 # --- AJOUTER UNE PHRASE ---
-if menu == "Ajouter":
-    st.header("Ajouter une nouvelle expression")
-    fr = st.text_input("🇫🇷 Français")
-    it = st.text_input("🇮🇹 Italien")
-    if st.button("Ajouter"):
-        if fr and it:
-            c.execute("INSERT INTO vocab (francais, italien) VALUES (?, ?)", (fr, it))
-            conn.commit()
-            st.success("Phrase ajoutée avec succès.")
-        else:
-            st.warning("Remplis les deux champs.")
+from deep_translator import GoogleTranslator
 
-# --- RÉVISION ---
+if menu == "Ajouter":
+    st.header("Ajouter une phrase ou un mot (en italien)")
+    it = st.text_input("Mot ou phrase en italien")
+
+    if st.button("Traduire et ajouter"):
+        if it:
+            try:
+                fr = GoogleTranslator(source='it', target='fr').translate(it)
+                c.execute("INSERT INTO vocab (francais, italien) VALUES (?, ?)", (fr, it))
+                conn.commit()
+                st.success(f"Ajouté : '{it}' → '{fr}'")
+            except Exception as e:
+                st.error(f"Erreur de traduction : {e}")
+        else:
+            st.warning("Saisis une phrase ou un mot en italien.")
+
+
+# --- REVISION ---
 elif menu == "Réviser":
     st.header("Révision")
     c.execute("SELECT * FROM vocab")
@@ -63,27 +70,44 @@ elif menu == "Réviser":
     if not data:
         st.info("Aucune phrase enregistrée.")
     else:
-        # Nouvelle question si pas encore stockée
-        if "question" not in st.session_state:
-            st.session_state.question = random.choice(data)
-            st.session_state.input_key = random.randint(0, 1000000)  # clé dynamique pour vider le champ
+        # Initialisation
+        if "mots_ok" not in st.session_state:
+            st.session_state.mots_ok = []
 
-        question = st.session_state.question
-        st.subheader(f"Traduire : **{question[1]}**")
+        # Filtrer les mots déjà réussis
+        mots_restants = [row for row in data if row[0] not in st.session_state.mots_ok]
 
-        reponse = st.text_input("Ta réponse en italien", key=st.session_state.input_key).strip().lower()
+        if not mots_restants:
+            st.success("Tu as répondu correctement à tous les mots pour cette session !")
+        else:
+            # Initialisation de la question si besoin
+            if "question" not in st.session_state or st.session_state.question is None or st.session_state.question[0] in st.session_state.mots_ok:
+                st.session_state.question = random.choice(mots_restants)
+                st.session_state.input_key = random.randint(0, 1000000)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ Vérifier"):
-                correct = question[2].strip().lower()
-                if reponse == correct:
-                    st.success("✔️ Bonne réponse !")
-                else:
-                    st.error(f"❌ Incorrect. Réponse correcte : {correct}")
+            question = st.session_state.question
+            st.subheader(f"Traduire : **{question[1]}**")  # Français
 
-        with col2:
-            if st.button("Nouvelle question"):
-                st.session_state.question = random.choice(data)
-                st.session_state.input_key = random.randint(0, 1000000)  # nouvelle clé = champ vidé
-                st.rerun()
+            reponse = st.text_input("Ta réponse en italien", key=st.session_state.input_key).strip().lower()
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Vérifier"):
+                    correct = question[2].strip().lower()
+                    if reponse == correct:
+                        st.success("Bonne réponse !")
+                        st.session_state.mots_ok.append(question[0])
+                        st.session_state.bonne_reponse = True
+                    else:
+                        st.error(f"Incorrect. Réponse correcte : {correct}")
+                        st.session_state.bonne_reponse = False
+
+
+            with col2:
+                if st.button("Nouvelle question"):
+                    st.session_state.question = None
+                    st.session_state.input_key = random.randint(0, 1000000)
+                    st.session_state.bonne_reponse = False
+                    st.rerun()
+
+
